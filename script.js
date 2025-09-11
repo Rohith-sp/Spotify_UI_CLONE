@@ -51,9 +51,10 @@ const playmusic = (track, buttonImg, pause = false) => {
     }
     resetAllSidebarIcons();
 
-    // Use the correct path case for audio files
-    const folderPath = currentFolder.replace('songs', 'Songs');
-    currentAudio = new Audio(`./${folderPath}/${track}.mp3`);
+    // Extract folder number from the path
+    const folderNum = currentFolder.split('/').pop();
+    // Construct the correct audio path
+    currentAudio = new Audio(`./Songs/${folderNum}/${track}.mp3`);
     currentSong = track;
     currentPlayButton = buttonImg;
 
@@ -107,20 +108,23 @@ const playmusic = (track, buttonImg, pause = false) => {
     });
 };
 
-async function getSongs(folder = "Songs") {
+async function getSongs(folder = "Songs/1") {
     try {
         currentFolder = folder;
         
+        // Extract folder number from the path
+        const folderNum = folder.split('/').pop();
+        
         // Try to fetch from info.json first
         try {
-            const folderNum = folder.split('/').pop();
             const response = await fetch(`./Songs/${folderNum}/info.json`);
             const data = await response.json();
             if (data && data.songs && Array.isArray(data.songs)) {
+                console.log(`Loaded songs from info.json for folder ${folderNum}:`, data.songs);
                 return data.songs;
             }
         } catch (e) {
-            console.warn("Could not load songs from info.json, falling back to hardcoded list");
+            console.warn(`Could not load songs from info.json for folder ${folderNum}, falling back to hardcoded list`, e);
         }
         
         // Fallback to hardcoded song lists
@@ -130,7 +134,9 @@ async function getSongs(folder = "Songs") {
             '3': ['Maiyya Mainu']
         };
         
-        return songMap[folder.split('/').pop()] || [];
+        const songs = songMap[folderNum] || [];
+        console.log(`Using hardcoded songs for folder ${folderNum}:`, songs);
+        return songs;
     } catch (error) {
         console.error("Error fetching songs:", error);
         return [];
@@ -190,67 +196,74 @@ async function displayAlbums() {
     const folders = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
     
     for (let folder of folders) {
-
-            try {
-                let metaRes = await fetch(`./Songs/${folder}/info.json`);
-                let meta = await metaRes.json();
+        try {
+            let metaRes = await fetch(`./Songs/${folder}/info.json`);
+            let meta = await metaRes.json();
+            
+            // Handle image path - support both direct paths and local image files (PNG or JPEG)
+            let imagePath = meta.image;
+            if (imagePath && !imagePath.startsWith('http') && !imagePath.startsWith('/')) {
+                // If it's a local file without a full path, assume it's in the album folder
+                imagePath = `./Songs/${folder}/${imagePath}`;
+            } else if (!imagePath) {
+                // If no image is specified, check for common image formats in the folder
+                const possibleImages = ['cover.jpg', 'cover.png', 'album.jpg', 'album.png', '1.jpg', '1.png'];
                 
-                // Handle image path - support both direct paths and local image files (PNG or JPEG)
-                let imagePath = meta.image;
-                if (imagePath && !imagePath.startsWith('http') && !imagePath.startsWith('/')) {
-                    // If it's a local file without a full path, assume it's in the album folder
-                    imagePath = `./Songs/${folder}/${imagePath}`;
-                } else if (!imagePath) {
-                    // If no image is specified, check for common image formats in the folder
-                    const possibleImages = ['cover.jpg', 'cover.png', 'album.jpg', 'album.png', '1.jpg', '1.png'];
-                    
-                    // Try to find the first available image
-                    for (const img of possibleImages) {
-                        try {
-                            const testImg = `./Songs/${folder}/${img}`;
-                            // We'll set this as the default and let the img tag's error handler deal with it if it doesn't exist
-                            imagePath = testImg;
-                            break;
-                        } catch (err) {
-                            console.warn(`Could not find image: ${img} in folder ${folder}`);
-                        }
-                    }
-                    
-                    // If no image was found, use a placeholder
-                    if (!imagePath) {
-                        imagePath = 'images/music.svg'; // Default placeholder
+                // Try to find the first available image
+                for (const img of possibleImages) {
+                    try {
+                        const testImg = `./Songs/${folder}/${img}`;
+                        // We'll set this as the default and let the img tag's error handler deal with it if it doesn't exist
+                        imagePath = testImg;
+                        break;
+                    } catch (err) {
+                        console.warn(`Could not find image: ${img} in folder ${folder}`);
                     }
                 }
-
-                cardContainer.innerHTML += `
-                    <div data-folder="${folder}" class="card border">
-                        <div class="play">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 60 60" fill="none">
-                                <circle cx="30" cy="30" r="30" fill="#1DB954" />
-                                <path d="M24 20L42 30L24 40V20Z" fill="black" />
-                            </svg>
-                        </div>
-                        <img src="${imagePath}" alt="Album cover" onerror="this.src='images/music.svg'; this.onerror=null;">
-                        <h2>${meta.title}</h2>
-                        <p>${meta.description}</p>
-                    </div>
-                `;
-            } catch (err) {
-                console.warn(`No info.json for folder ${folder}`);
+                
+                // If no image was found, use a placeholder
+                if (!imagePath) {
+                    imagePath = 'images/music.svg'; // Default placeholder
+                }
             }
+
+            cardContainer.innerHTML += `
+                <div data-folder="${folder}" class="card border">
+                    <div class="play">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 60 60" fill="none">
+                            <circle cx="30" cy="30" r="30" fill="#1DB954" />
+                            <path d="M24 20L42 30L24 40V20Z" fill="black" />
+                        </svg>
+                    </div>
+                    <img src="${imagePath}" alt="Album cover" onerror="this.src='images/music.svg'; this.onerror=null;">
+                    <h2>${meta.title}</h2>
+                    <p>${meta.description}</p>
+                </div>
+            `;
+        } catch (err) {
+            console.warn(`No info.json for folder ${folder}`);
         }
     }
 
     // attach listeners AFTER rendering
     Array.from(document.getElementsByClassName("card")).forEach(card => {
         card.addEventListener("click", async () => {
-            let songs = await getSongs(`Songs/${card.dataset.folder}`);
-            renderSongList(songs);
-            if (songs.length > 0) {
-                playmusic(songs[0], playBarBtn);
+            const folderPath = `Songs/${card.dataset.folder}`;
+            console.log(`Card clicked, loading songs from: ${folderPath}`);
+            // Update the global playlist songs
+            currentPlaylistSongs = await getSongs(folderPath);
+            renderSongList(currentPlaylistSongs);
+            if (currentPlaylistSongs.length > 0) {
+                // Get the first song's play button
+                const firstSongPlayBtn = document.querySelector(".songList ul li:first-child .playnow img");
+                playmusic(currentPlaylistSongs[0], firstSongPlayBtn || playBarBtn);
             }
         });
     });
+}
+
+// Store current playlist songs globally
+let currentPlaylistSongs = [];
 
 async function main() {
     setupMobileMenu();
@@ -258,10 +271,11 @@ async function main() {
     // Display all albums
     await displayAlbums();
 
-    let songs = await getSongs("songs/ncs");
+    // Load initial songs
+    currentPlaylistSongs = await getSongs("Songs/1");
     playBarBtn.src = "images/play.svg";
-    if (songs.length > 0) playmusic(songs[0], playBarBtn, true);
-    renderSongList(songs);
+    if (currentPlaylistSongs.length > 0) playmusic(currentPlaylistSongs[0], playBarBtn, true);
+    renderSongList(currentPlaylistSongs);
 
     // Playbar toggle
     playBarBtn.addEventListener("click", () => {
@@ -291,21 +305,23 @@ async function main() {
 
     // Previous & next
     document.getElementById("previous").addEventListener("click", () => {
-        if (!currentSong) return;
-        let currentIndex = songs.indexOf(currentSong);
-        let previousIndex = (currentIndex - 1 + songs.length) % songs.length;
-        let previousSong = songs[previousIndex];
+        if (!currentSong || currentPlaylistSongs.length === 0) return;
+        let currentIndex = currentPlaylistSongs.indexOf(currentSong);
+        if (currentIndex === -1) currentIndex = 0;
+        let previousIndex = (currentIndex - 1 + currentPlaylistSongs.length) % currentPlaylistSongs.length;
+        let previousSong = currentPlaylistSongs[previousIndex];
         let playBtn = document.querySelector(`.songList ul li:nth-child(${previousIndex + 1}) .playnow img`);
-        playmusic(previousSong, playBtn);
+        playmusic(previousSong, playBtn || playBarBtn);
     });
 
     document.getElementById("next").addEventListener("click", () => {
-        if (!currentSong) return;
-        let currentIndex = songs.indexOf(currentSong);
-        let nextIndex = (currentIndex + 1) % songs.length;
-        let nextSong = songs[nextIndex];
+        if (!currentSong || currentPlaylistSongs.length === 0) return;
+        let currentIndex = currentPlaylistSongs.indexOf(currentSong);
+        if (currentIndex === -1) currentIndex = 0;
+        let nextIndex = (currentIndex + 1) % currentPlaylistSongs.length;
+        let nextSong = currentPlaylistSongs[nextIndex];
         let playBtn = document.querySelector(`.songList ul li:nth-child(${nextIndex + 1}) .playnow img`);
-        playmusic(nextSong, playBtn);
+        playmusic(nextSong, playBtn || playBarBtn);
     });
 }
 
