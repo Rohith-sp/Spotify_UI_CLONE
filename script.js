@@ -1,7 +1,7 @@
 let currentAudio = null;
 let currentSong = null;
 let currentPlayButton = null;
-let currentFolder = "songs"; // default folder
+let currentFolder = "Songs"; // default folder
 
 // Get the main playbar button once
 const playBarBtn = document.getElementById("play");
@@ -51,7 +51,9 @@ const playmusic = (track, buttonImg, pause = false) => {
     }
     resetAllSidebarIcons();
 
-    currentAudio = new Audio(`./${currentFolder}/${track}.mp3`);
+    // Use the correct path case for audio files
+    const folderPath = currentFolder.replace('songs', 'Songs');
+    currentAudio = new Audio(`./${folderPath}/${track}.mp3`);
     currentSong = track;
     currentPlayButton = buttonImg;
 
@@ -105,26 +107,30 @@ const playmusic = (track, buttonImg, pause = false) => {
     });
 };
 
-async function getSongs(folder = "songs") {
+async function getSongs(folder = "Songs") {
     try {
         currentFolder = folder;
-        let response = await fetch(`./${folder}/`);
-        let data = await response.text();
-        let div = document.createElement("div");
-        div.innerHTML = data;
-
-        let as = div.getElementsByTagName("a");
-        let songs = [];
-        for (let index = 0; index < as.length; index++) {
-            const element = as[index];
-            if (element.href.endsWith(".mp3")) {
-                let filename = element.href.split("/").pop();
-                filename = decodeURIComponent(filename);
-                filename = filename.replace(/\.mp3$/i, "");
-                songs.push(filename);
+        
+        // Try to fetch from info.json first
+        try {
+            const folderNum = folder.split('/').pop();
+            const response = await fetch(`./Songs/${folderNum}/info.json`);
+            const data = await response.json();
+            if (data && data.songs && Array.isArray(data.songs)) {
+                return data.songs;
             }
+        } catch (e) {
+            console.warn("Could not load songs from info.json, falling back to hardcoded list");
         }
-        return songs;
+        
+        // Fallback to hardcoded song lists
+        const songMap = {
+            '1': ['Aavan Javan', 'Janaab e Aali'],
+            '2': ['Manwa Laage', 'Tere Liye'],
+            '3': ['Maiyya Mainu']
+        };
+        
+        return songMap[folder.split('/').pop()] || [];
     } catch (error) {
         console.error("Error fetching songs:", error);
         return [];
@@ -179,25 +185,21 @@ function setupMobileMenu() {
 
 async function displayAlbums() {
     const cardContainer = document.querySelector(".cardcontainer");
-    let response = await fetch(`./songs/`);
-    let data = await response.text();
-    let div = document.createElement("div");
-    div.innerHTML = data;
-    let anchors = div.getElementsByTagName("a");
-
-    for (let e of anchors) {
-        if (e.href.includes("/songs/") && !e.href.endsWith(".mp3") && !e.href.endsWith("/songs/")) {
-            let folder = e.href.split("/").filter(Boolean).pop();
+    
+    // Hardcoded list of folders since directory listing isn't supported in production
+    const folders = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+    
+    for (let folder of folders) {
 
             try {
-                let metaRes = await fetch(`./songs/${folder}/info.json`);
+                let metaRes = await fetch(`./Songs/${folder}/info.json`);
                 let meta = await metaRes.json();
                 
                 // Handle image path - support both direct paths and local image files (PNG or JPEG)
                 let imagePath = meta.image;
                 if (imagePath && !imagePath.startsWith('http') && !imagePath.startsWith('/')) {
                     // If it's a local file without a full path, assume it's in the album folder
-                    imagePath = `./songs/${folder}/${imagePath}`;
+                    imagePath = `./Songs/${folder}/${imagePath}`;
                 } else if (!imagePath) {
                     // If no image is specified, check for common image formats in the folder
                     const possibleImages = ['cover.jpg', 'cover.png', 'album.jpg', 'album.png', '1.jpg', '1.png'];
@@ -205,7 +207,7 @@ async function displayAlbums() {
                     // Try to find the first available image
                     for (const img of possibleImages) {
                         try {
-                            const testImg = `./songs/${folder}/${img}`;
+                            const testImg = `./Songs/${folder}/${img}`;
                             // We'll set this as the default and let the img tag's error handler deal with it if it doesn't exist
                             imagePath = testImg;
                             break;
@@ -242,14 +244,13 @@ async function displayAlbums() {
     // attach listeners AFTER rendering
     Array.from(document.getElementsByClassName("card")).forEach(card => {
         card.addEventListener("click", async () => {
-            let songs = await getSongs(`songs/${card.dataset.folder}`);
+            let songs = await getSongs(`Songs/${card.dataset.folder}`);
             renderSongList(songs);
             if (songs.length > 0) {
                 playmusic(songs[0], playBarBtn);
             }
         });
     });
-}
 
 async function main() {
     setupMobileMenu();
