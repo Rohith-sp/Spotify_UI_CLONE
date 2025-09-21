@@ -2,6 +2,7 @@ let currentAudio = null;
 let currentSong = null;
 let currentPlayButton = null;
 let currentFolder = "Songs"; // default folder
+let currentVolume = 0.8; // Initial volume set to 80%
 
 // Get the main playbar button once
 const playBarBtn = document.getElementById("play");
@@ -55,6 +56,9 @@ const playmusic = (track, buttonImg, pause = false) => {
     const folderNum = currentFolder.split('/').pop();
     // Construct the correct audio path
     currentAudio = new Audio(`./Songs/${folderNum}/${track}.mp3`);
+    // Set initial volume when creating new audio element
+    currentAudio.volume = currentVolume;
+    currentAudio.muted = false;
     currentSong = track;
     currentPlayButton = buttonImg;
 
@@ -323,6 +327,82 @@ async function main() {
         let playBtn = document.querySelector(`.songList ul li:nth-child(${nextIndex + 1}) .playnow img`);
         playmusic(nextSong, playBtn || playBarBtn);
     });
+
+    // Volume control functionality
+    const volumeBtn = document.querySelector('.volume img');
+    const volumeControl = document.querySelector('.verticalvolumecontrol');
+    const volumeContainer = document.querySelector('.volume');
+    
+    // Update volume display
+    const updateVolumeDisplay = () => {
+        if (!currentAudio) return;
+        
+        // Update volume button icon based on mute state
+        if (currentAudio.muted) {
+            volumeBtn.src = 'images/mute.svg';
+        } else {
+            volumeBtn.src = 'images/volume.svg';
+        }
+        
+        // Update volume control appearance
+        volumeControl.style.background = `linear-gradient(to bottom,
+            limegreen 0%, 
+            limegreen ${currentVolume * 100}%, 
+            #3a3a3a ${currentVolume * 100}%, 
+            #3a3a3a 100%)`;
+        
+        // Update the circle position
+        volumeControl.style.setProperty('--circle-position', `${currentVolume * 100}%`);
+    };
+    
+    // Toggle volume control visibility
+    const toggleVolumeControl = () => {
+        volumeControl.style.display = volumeControl.style.display === 'block' ? 'none' : 'block';
+    };
+    
+    // Volume button click handler (show/hide volume control)
+    volumeBtn.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent event from reaching the container
+        toggleVolumeControl();
+    });
+    
+    // Volume container click handler (toggle visibility)
+    volumeContainer.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent document click from hiding immediately
+        toggleVolumeControl();
+    });
+    
+    // Hide volume control when clicking elsewhere on the document
+    document.addEventListener('click', () => {
+        volumeControl.style.display = 'none';
+    });
+    
+    // Volume control click handler
+    volumeControl.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent hiding when clicking on the control itself
+        if (!currentAudio) return;
+        
+        const rect = volumeControl.getBoundingClientRect();
+        const clickY = e.clientY - rect.top;
+        const height = rect.height;
+        
+        // Calculate volume percentage (0 to 100)
+        // Fixed: Clicking at the bottom decreases volume, clicking at the top increases volume
+        const volumePercent = 1 - (clickY / height);
+        
+        // Clamp between 0 and 1
+        currentVolume = Math.max(0, Math.min(1, volumePercent));
+        
+        // Set the volume
+        currentAudio.volume = currentVolume;
+        currentAudio.muted = false; // Unmute if muted
+        
+        // Update the display
+        updateVolumeDisplay();
+    });
+    
+    // Initialize volume control appearance
+    updateVolumeDisplay();
 }
 
 main();
